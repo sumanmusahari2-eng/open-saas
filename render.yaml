@@ -1,0 +1,56 @@
+services:
+  # Node.js server -- Render installs Wasp and builds from source.
+  # Database is Neon (external), NOT a Render database: Render's free
+  # PostgreSQL expires after 30 days, so DATABASE_URL below is filled
+  # with the Neon connection string after the database is created.
+  - type: web
+    name: open-saas-server
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: >-
+      npm install -g @wasp.sh/wasp-cli@0.26 &&
+      export PATH="$(npm prefix -g)/bin:$PATH" &&
+      wasp install &&
+      wasp build &&
+      cd .wasp/out/server &&
+      npm install &&
+      npx prisma generate --schema=../db/schema.prisma &&
+      npm run bundle
+    startCommand: cd .wasp/out/server && npm run start-production
+    envVars:
+      - key: DATABASE_URL
+        sync: false # fill with the Neon connection string
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WASP_SERVER_URL
+        sync: false # fill after the first deploy: https://open-saas-server.onrender.com
+      - key: WASP_WEB_CLIENT_URL
+        sync: false # fill after the first deploy: https://open-saas-client.onrender.com
+      - key: NODE_VERSION
+        value: "24"
+
+  # React client -- static site built with Vite
+  - type: web
+    name: open-saas-client
+    runtime: static
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: >-
+      npm install -g @wasp.sh/wasp-cli@0.26 &&
+      export PATH="$(npm prefix -g)/bin:$PATH" &&
+      wasp install &&
+      wasp build &&
+      npx vite build
+    staticPublishPath: .wasp/out/web-app/build
+    envVars:
+      - key: REACT_APP_API_URL
+        sync: false # fill after the first deploy: https://open-saas-server.onrender.com
+      - key: NODE_VERSION
+        value: "24"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /200.html
